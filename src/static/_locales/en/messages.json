@@ -39,6 +39,10 @@
     "message": "Undo",
     "description": "Undo button label"
   },
+  "copiedToClipboardNotice": {
+    "message": "Json Copied Successfully!",
+    "description": "Snackbar message when json is copied to clipboard"
+  },
   "buttonSave": {
     "message": "Save",
     "description": "Save button label"
