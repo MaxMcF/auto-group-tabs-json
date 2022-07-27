@@ -4,30 +4,24 @@ import {
   TabUpdate,
   tickResetRef,
   useGroupConfigurations,
-  useReadonlyChromeTabGroups,
-  useReadonlyChromeTabs,
-  useReadonlyChromeWindows,
-  useChromeTabsById,
-  useChromeTabsByWindowId,
-  useChromeTabGroupsByWindowId
+  ignoreChromeRuntimeEvents,
+  useChromeState
 } from '@/composables'
 import * as conflictManager from '@/util/conflict-manager'
-import { saveGroupConfigurations } from '@/util/group-configurations'
+import {
+  saveGroupConfigurations,
+  createGroupConfigurationMatcher
+} from '@/util/group-configurations'
 import { GroupCreationTracker } from '@/util/group-creation-tracker'
 import { generateMatcherRegex } from '@/util/matcher-regex'
 import { GroupConfiguration } from '@/util/types'
 import { when } from '@/util/when'
 
+ignoreChromeRuntimeEvents.value = true
+
 const groupConfigurations = useGroupConfigurations()
 
-const chromeState = {
-  windows: useReadonlyChromeWindows(),
-  tabGroups: useReadonlyChromeTabGroups(),
-  tabs: useReadonlyChromeTabs(),
-  tabsById: useChromeTabsById(),
-  tabsByWindowId: useChromeTabsByWindowId(),
-  tabGroupsByWindowId: useChromeTabGroupsByWindowId()
-}
+const chromeState = useChromeState()
 
 // Augmented group configurations are group configurations with
 // enhanced functionality, e.g. matchers converted to regular expressions
@@ -90,25 +84,23 @@ const chromeTabsByWindowIdAndGroupConfiguration = computed(() =>
 
 Object.assign(self, { chromeState })
 
+/**
+ * Get a matching configuration group for a tab
+ */
 function getGroupConfigurationForTab(tab: chrome.tabs.Tab) {
-  // Ignore tabs that are already grouped
-  // if (tab.groupId !== chrome.tabGroups.TAB_GROUP_ID_NONE) {
-  //   console.debug('Tab already grouped, ignore')
-  //   return
-  // }
-
   // Ignore pinned tabs
   if (tab.pinned) {
     console.debug('Tab %o (%o) pinned, ignore.', tab.title, tab.id)
     return
   }
 
+  // Ignore tabs with no URL
   if (!tab.url) {
     console.debug('Tab %o (%o) has no URL, ignore.', tab.title, tab.id)
     return
   }
 
-  // Iterate group assignment configuration
+  // Iterate tab group configurations
   let groupIndex = 0
   for (const group of augmentedGroupConfigurations.value) {
     for (const matcher of group.matchers) {
@@ -118,17 +110,11 @@ function getGroupConfigurationForTab(tab: chrome.tabs.Tab) {
     groupIndex++
   }
 
+  // No matching group found
   return
 }
 
 const groupCreationTracker = new GroupCreationTracker()
-
-function matchTabGroup(
-  group: Partial<Pick<GroupConfiguration, 'title' | 'color'>>
-) {
-  return (tabGroup: Partial<Pick<GroupConfiguration, 'title' | 'color'>>) =>
-    tabGroup.title === group.title && tabGroup.color === group.color
-}
 
 async function assignTabsToGroup(
   tabs: chrome.tabs.Tab[],
@@ -138,7 +124,7 @@ async function assignTabsToGroup(
 
   const windowId = tabs[0].windowId
 
-  const tabGroupPredicate = matchTabGroup(group)
+  const tabGroupPredicate = createGroupConfigurationMatcher(group)
 
   // Get existing tab groups that match the configured group
   let tabGroup =
@@ -268,9 +254,11 @@ const programmaticallyUpdatingTabGroups = ref(false)
 
 const draggingTabs = new Set<number>()
 
+// React to changed group configurations
 watch(
   augmentedGroupConfigurations,
   async (newGroups, oldGroups) => {
+    // Bail out if group configurations haven't loaded yet
     if (
       !groupConfigurations.loaded.value ||
       justLoadedGroupConfigurations.value
@@ -432,8 +420,8 @@ watch(chromeState.tabGroups.lastUpdated, async tabGroup => {
   )
     return
 
-  const matchesOldGroup = matchTabGroup(oldTabGroup)
-  const matchesNewGroup = matchTabGroup(tabGroup)
+  const matchesOldGroup = createGroupConfigurationMatcher(oldTabGroup)
+  const matchesNewGroup = createGroupConfigurationMatcher(tabGroup)
 
   if (groupConfigurations.data.value.some(matchesOldGroup)) {
     const groupsCopy: GroupConfiguration[] = JSON.parse(
@@ -510,6 +498,11 @@ when(groupConfigurations.loaded).then(async () => {
   )
   await groupAllAppropriateTabs()
 
+  console.debug(
+    'Initial grouping done, begin listening to chrome runtime events...'
+  )
+  ignoreChromeRuntimeEvents.value = false
+
   watch(chromeState.tabs.lastUpdated, async (update: TabUpdate | undefined) => {
     if (!update) return
     if (chromeState.tabs.detachedTabs.value.includes(update.tab.id!)) return
@@ -564,4 +557,9 @@ when(groupConfigurations.loaded).then(async () => {
       await assignTabsToGroup([updatedTab], group)
     }
   })
+})
+
+chrome.action.onClicked.addListener(() => {
+  console.debug('Trigger extension action')
+  chrome.runtime.openOptionsPage()
 })

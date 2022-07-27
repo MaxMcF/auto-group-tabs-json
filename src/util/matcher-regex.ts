@@ -19,21 +19,47 @@ export function generateMatcherRegex(matcher: string) {
     throw new Error('Invalid matcher: ' + matcher)
   }
 
-  const { scheme, host, path } = result.groups ?? {}
+  const { scheme, host, path, fileScheme, filePath } = result.groups ?? {}
 
-  const schemePattern =
-    typeof scheme === 'string'
-      ? generatePatternString(scheme, 'https?')
-      : 'https?|file|ftp'
-  const hostPattern =
-    typeof host === 'string'
-      ? generatePatternString(
-          host.startsWith('*.') ? `*${host.slice(2)}` : host,
-          host === '*' ? '[^/]+.[^/]+|localhost(:[0-9]+)?' : '([^/]+.)?'
-        )
-      : '[^/]+.[^/]+'
-  const pathPattern =
-    typeof path === 'string' ? generatePatternString(path, '.*') : '.*'
+  const schemePattern = fileScheme
+    ? 'file'
+    : typeof scheme === 'string'
+    ? generatePatternString(scheme, 'https?')
+    : '(?:https?|ftp)'
 
-  return new RegExp(`^(${schemePattern})://(${hostPattern})(/${pathPattern})?$`)
+  let hostPattern: string
+  if (fileScheme) {
+    hostPattern = ''
+  } else if (typeof host === 'string') {
+    // Three possible formats: *, *.host, host
+    if (host === '*') {
+      hostPattern = '[^/]+'
+    } else if (host.startsWith('*.')) {
+      // Format: *.host
+      hostPattern = generatePatternString(`*${host.slice(2)}`, '(?:[^/]+\\.)?')
+    } else {
+      // Format: host
+      hostPattern = sanitizeRegex(host)
+    }
+
+    // Add port wildcard
+    if (!/:[0-9]+$/.test(host)) {
+      hostPattern += '(?::[0-9]+)?'
+    }
+  } else {
+    // A theoretically impossible case, but used as a fallback
+    // if for some reason input validation did not catch it
+    hostPattern = '[^/]+'
+  }
+
+  let pathPattern: string
+  if (filePath) {
+    pathPattern = generatePatternString(filePath, '.*')
+  } else if (typeof path === 'string') {
+    pathPattern = `(?:/${generatePatternString(path, '.*')})?`
+  } else {
+    pathPattern = '(?:/.*)?'
+  }
+
+  return new RegExp(`^${schemePattern}://${hostPattern}${pathPattern}$`)
 }
