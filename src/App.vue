@@ -1,22 +1,11 @@
 <template>
   <div class="settings">
     <div class="groups">
-      <img
-        v-if="groupsCopy.length === 0"
-        src="/arrow.svg"
-        class="initial-arrow"
-        draggable="false"
-      />
+      <img v-if="groupsCopy.length === 0" src="/arrow.svg" class="initial-arrow" draggable="false" />
 
       <template v-else>
-        <Draggable
-          v-model="groupsCopy"
-          item-key="id"
-          handle=".drag-handle"
-          drag-class="dragging"
-          @start="startDragging"
-          @end="dragging = false"
-        >
+        <Draggable v-model="groupsCopy" item-key="id" handle=".drag-handle" drag-class="dragging" @start="startDragging"
+          @end="dragging = false">
           <template #header>
             <SlideVertical :duration="0.3">
               <div class="sort-hint" v-if="sortMode">
@@ -25,55 +14,35 @@
             </SlideVertical>
           </template>
           <template #item="{ element: group }">
-            <Group
-              :ref="(component: any) => {
-                if (component === null) {
-                  delete groupRefs[group.id]
-                } else {
-                  groupRefs[group.id] = component
-                }
-              }"
-              :id="`group-${group.id}`"
-              :group-id="group.id"
-              v-model:title="group.title"
-              v-model:color="group.color"
-              v-model:matchers="group.matchers"
-              @delete="deleteGroup(group)"
-              @after-enter="resetBodyHeight"
-              :sort-mode="sortMode"
-            />
+            <Group :ref="(component: any) => {
+              if (component === null) {
+                delete groupRefs[group.id]
+              } else {
+                groupRefs[group.id] = component
+              }
+            }" :id="`group-${group.id}`" :group-id="group.id" v-model:title="group.title" v-model:color="group.color"
+              v-model:matchers="group.matchers" @delete="deleteGroup(group)" @after-enter="resetBodyHeight"
+              :sort-mode="sortMode" />
           </template>
         </Draggable>
       </template>
     </div>
 
     <div class="bottom-buttons">
-      <mwc-fab
-        v-if="groups.data.value.length > 1"
-        class="secondary-button sort-button"
-        :class="{ toggled: sortMode }"
-        icon="import_export"
-        @click="toggleSortMode"
-        mini
-        :title="msg.buttonSortMode"
-      />
+      <mwc-fab v-if="groups.data.value.length > 1" class="secondary-button sort-button" :class="{ toggled: sortMode }"
+        icon="import_export" @click="toggleSortMode" mini :title="msg.buttonSortMode" />
+      <mwc-fab ref="addJSON" icon="code" @click="openAddJSON" mini :title="msg.buttonAddJSON" />
 
-      <mwc-fab
-        ref="addButton"
-        icon="add"
-        @click="openAddDialog"
-        mini
-        :title="msg.buttonAddGroup"
-      />
+      <mwc-fab ref="addButton" icon="add" @click="openAddDialog" mini :title="msg.buttonAddGroup" />
+
     </div>
 
     <transition name="from-right">
-      <EditDialog
-        v-if="showAddDialog"
-        color="grey"
-        @save="addGroup"
-        @close="closeAddDialog"
-      />
+      <EditDialog v-if="showAddDialog" color="grey" @save="addGroup" @close="closeAddDialog" />
+    </transition>
+
+    <transition name="from-left">
+      <JSONImporter v-if="showAddJSON" color="grey" @save="addJSONFunction" @close="closeAddJSON" />
     </transition>
 
     <mwc-snackbar :labelText="msg.groupDeletedNotice" ref="snackbar">
@@ -93,8 +62,9 @@ import Draggable from 'vuedraggable'
 import { useDebounceFn } from '@vueuse/core'
 
 import { useSyncedCopy, useGroupConfigurations } from '@/composables'
-import { saveGroupConfigurations } from '@/util/group-configurations'
+import { saveGroupConfigurations, saveGroupJSONConfigurations } from '@/util/group-configurations'
 import { GroupConfiguration, Translation } from '@/util/types'
+import JSONImporter from './components/Dialog/JSONImporter.vue'
 
 const msg = inject<Translation>('msg')!
 const snackbar = ref()
@@ -117,12 +87,21 @@ function undo() {
 }
 
 const showAddDialog = ref(false)
+const showAddJSON = ref(false)
+
 function openAddDialog() {
   showAddDialog.value = true
 }
 function closeAddDialog() {
   showAddDialog.value = false
   addButton.value.focus()
+}
+
+function openAddJSON() {
+  showAddJSON.value = true
+}
+function closeAddJSON() {
+  showAddJSON.value = false
 }
 
 const sortMode = ref(false)
@@ -195,6 +174,13 @@ function addGroup(title: string, color: chrome.tabGroups.ColorEnum) {
     }, 0)
   })
 }
+
+function addJSONFunction(editJSON: string) {
+  console.log("This is hitting", editJSON)
+  let resp = saveGroupJSONConfigurations(editJSON)
+  console.log(resp)
+}
+
 
 // This starter template is using Vue 3 experimental <script setup> SFCs
 // Check out https://github.com/vuejs/rfcs/blob/script-setup-2/active-rfcs/0000-script-setup.md
