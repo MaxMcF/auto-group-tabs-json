@@ -1,14 +1,19 @@
 <template>
   <OverlayDialog @keydown.esc="cancel" @keydown.enter="save">
-    <Textfield ref="jsonField" class="group-title" v-model="editJSON" :placeholder="msg.jsonPlaceholder" />
-    <div>
+    <JsonField ref="jsonField" class="group-title" v-model="editJSON" :placeholder="msg.jsonPlaceholder" />
+
+    <!-- <div class="json-display">
       {{ currentJson }}
-    </div>
+    </div> -->
     <template v-slot:actionsBar>
+      <mwc-button class="bottom-buttons" icon="content_paste" dialogAction="ok" unelevated @click="copy" />
       <mwc-button class="button-save" dialogAction="ok" unelevated @click="save" v-text="msg.buttonSave" />
       <mwc-button class="button-cancel" style="--mdc-theme-primary: var(--dimmed)" @click="cancel"
         v-text="msg.buttonCancel" />
     </template>
+    <mwc-snackbar :labelText="msg.copiedToClipboardNotice" ref="snackbar">
+      <mwc-icon-button icon="close" slot="dismiss" />
+    </mwc-snackbar>
   </OverlayDialog>
 </template>
 
@@ -23,6 +28,7 @@ import { readStorage } from '../../util/storage'
 import * as conflictManager from '@/util/conflict-manager'
 import { Translation } from '@/util/types'
 import { html } from 'lit-html'
+import JsonField from '../Form/JsonField.vue'
 
 const props = withDefaults(
   defineProps<{
@@ -41,9 +47,10 @@ const editJSON = ref(conflictManager.withoutMarker(props.title))
 const groups = useGroupConfigurations()
 const msg = inject<Translation>('msg')!
 const jsonField = ref()
+const snackbar = ref()
 
 const currentJson = JSON.stringify(groups.data.value, null, "\t")
-
+editJSON.value = currentJson
 const emit = defineEmits<{
   (e: 'save', editJSON: string): void
   (e: 'delete'): void
@@ -77,6 +84,14 @@ function save(event: KeyboardEvent) {
 function cancel() {
   emit('cancel')
   emit('close')
+}
+
+function copy(event: KeyboardEvent) {
+  console.log("Copy", currentJson)
+  event.preventDefault()
+  navigator.clipboard.writeText(currentJson)
+  snackbar.value.show()
+  console.log("SUCCESS")
 }
 
 </script>
@@ -181,6 +196,8 @@ mwc-dialog {
 
 .group-title {
   margin: 1.5rem 0;
+  height: 100%;
+  white-space: pre-wrap;
 }
 
 .preview {
@@ -197,5 +214,11 @@ mwc-dialog {
 .button-cancel {
   margin-left: auto;
   order: -1;
+}
+
+.json-display {
+  white-space: pre-wrap;
+  font-family: monospace;
+  background-color: rgb(47, 46, 46);
 }
 </style>
